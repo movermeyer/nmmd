@@ -2,8 +2,8 @@ import re
 import unittest
 from nose.tools import assert_raises
 
-from dispatcher import DispatchError
-from dispatcher.ext.regex import RegexDispatcher
+from nmmd import DispatchError
+from nmmd.ext.regex import RegexDispatcher
 
 
 class Processor:
@@ -15,7 +15,7 @@ class Processor:
         return self.dispatcher.dispatch(*args, **kwargs)
 
     # -----------------------------------------------------------------------
-    # Single dispatch methods.
+    # Function dispatch methods.
     # -----------------------------------------------------------------------
     @dispatcher(r'\((\d{3})\)\s*(\d{3})\-?(\d{4})')
     def handle_phone(self, string, matchobj):
@@ -57,15 +57,15 @@ class TestRegexDispatcher(unittest.TestCase):
     # Test basic method resolution.
     # -----------------------------------------------------------------------
     def test_resolve_phone(self):
-        method = self.processor.dispatcher.get_method('(123) 555-1234')
+        method, meta = self.processor.dispatcher.get_method('(123) 555-1234')
         self.assertEqual(method, self.processor.handle_phone)
 
     def test_resolve_ssn(self):
-        method = self.processor.dispatcher.get_method('123-45-6789')
+        method, meta = self.processor.dispatcher.get_method('123-45-6789')
         self.assertEqual(method, self.processor.handle_ssn)
 
     def test_resolve_cow(self):
-        method = self.processor.dispatcher.get_method('moomoomoo')
+        method, meta = self.processor.dispatcher.get_method('moomoomoo')
         self.assertEqual(method, self.processor.handle_cow)
 
     def test_resolve_failure(self):
@@ -95,7 +95,8 @@ class TestRegexDispatcher(unittest.TestCase):
             self.processor.handle_vowel,
             self.processor.handle_letter
             ])
-        methods = set(self.processor.dispatcher.iter_methods('e'))
+        methods = self.processor.dispatcher.gen_methods('e')
+        methods = set(dict(methods))
         self.assertEqual(methods, expected)
 
     def test_resolve_a(self):
@@ -104,7 +105,8 @@ class TestRegexDispatcher(unittest.TestCase):
             self.processor.handle_letter,
             self.processor.handle_a,
             ])
-        methods = set(self.processor.dispatcher.iter_methods('A'))
+        methods = self.processor.dispatcher.gen_methods('A')
+        methods = set(dict(methods))
         self.assertEqual(methods, expected)
 
     def test_resolve_consonant(self):
@@ -112,7 +114,8 @@ class TestRegexDispatcher(unittest.TestCase):
             self.processor.handle_consonant,
             self.processor.handle_letter
             ])
-        methods = set(self.processor.dispatcher.iter_methods('b'))
+        methods = self.processor.dispatcher.gen_methods('b')
+        methods = set(dict(methods))
         self.assertEqual(methods, expected)
 
     # -----------------------------------------------------------------------
@@ -120,15 +123,15 @@ class TestRegexDispatcher(unittest.TestCase):
     # -----------------------------------------------------------------------
     def test_dispatch_vowel(self):
         expected = set(['vowel', 'letter'])
-        vals = set(self.processor.dispatcher.iter_dispatch('e'))
+        vals = set(self.processor.dispatcher.gen_dispatch('e'))
         self.assertEqual(vals, expected)
 
     def test_dispatch_a(self):
         expected = set(['vowel', 'letter', 'a'])
-        vals = set(self.processor.dispatcher.iter_dispatch('A'))
+        vals = set(self.processor.dispatcher.gen_dispatch('A'))
         self.assertEqual(vals, expected)
 
     def test_dispatch_consonant(self):
         expected = set(['consonant', 'letter'])
-        vals = set(self.processor.dispatcher.iter_dispatch('b'))
+        vals = set(self.processor.dispatcher.gen_dispatch('b'))
         self.assertEqual(vals, expected)
