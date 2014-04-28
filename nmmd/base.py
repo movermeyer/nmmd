@@ -4,6 +4,39 @@ The other does everything by calling user-defined functions to generate
 possible names of the dispatchable methods, with no decorator nonsense
 required. But ideally there should be an easy migration path from one to
 the other if necessary.
+
+UPDATE: Ok, there are tree types of dispatchers. Also need one that can
+be defined at the module level, then used to dispatch in a way that treats
+each class as a distinct environment for dispatchery.
+
+
+class Dispatcher(Dispatcher):
+
+    def prepare(self):
+        for invok
+
+
+class State1:
+
+    @dispatcher('a', 'b', 'c')
+    def handler1(self, *stuff):
+        return State2('cow')
+
+    @dispatcher('e', 'f', 'g')
+    def handler2(self, *stuff):
+        return State2('pig')
+
+
+class State2:
+
+    @dispatcher('f')
+    def handler1(self, *stuff):
+        pass
+
+    @dispatcher('h', 'i', 'j')
+    def handler2(self, *stuff):
+        pass
+
 '''
 import types
 import pickle
@@ -11,7 +44,7 @@ import inspect
 import functools
 import collections
 
-from hercules import CachedAttr, CachedClassAttr
+from hercules import CachedAttr, CachedClassAttr, NoClobberDict
 
 
 class DispatchError(Exception):
@@ -31,7 +64,7 @@ class ImplementationError(Exception):
     '''
 
 
-class BaseDispatcher(object):
+class BaseDispatcher:
     DispatchError = DispatchError
     DispatchInterrupt = DispatchInterrupt
     GeneratorType = types.GeneratorType
@@ -112,7 +145,9 @@ class Dispatcher(BaseDispatcher):
         return self.registry
 
     def gen_methods(self, *args, **kwargs):
-        '''Find all method names this input dispatches to.
+        '''Find all method names this input dispatches to. This method
+        can accept *args, **kwargs, but it's the gen_dispatch method's
+        job of passing specific args to handler methods.
         '''
         dispatched = False
         for invoc, methodname in self.registry:
@@ -122,6 +157,13 @@ class Dispatcher(BaseDispatcher):
 
         if dispatched:
             return
+
+        # Try the generic handler.
+        generic_handler = getattr(self.inst, 'generic_handler', None)
+        if generic_handler is not None:
+            yield generic_handler, args, kwargs
+
+        # Give up.
         msg = 'No method was found for %r on %r.'
         raise self.DispatchError(msg % ((args, kwargs), self.inst))
 
@@ -142,28 +184,30 @@ class Dispatcher(BaseDispatcher):
     def gen_dispatch(self, *args, **kwargs):
         '''Find and evaluate/yield every method this input dispatches to.
         '''
+        dispatched = False
         for method_data in self.gen_methods(*args, **kwargs):
             dispatched = True
-            result = self.apply_handler(method_data)
-            yield from self.yield_from_handler(result)
+
+            result = self.apply_handler(method_data, *args, **kwargs)
+            yield result
+            # return self.yield_from_handler(result)
         if dispatched:
             return
         msg = 'No method was found for %r on %r.'
         raise self.DispatchError(msg % ((args, kwargs), self.inst))
 
-    def apply_handler(self, method_data):
+    def apply_handler(self, method_data, *args, **kwargs):
         '''Call the dispatched function, optionally with other data
         stored/created during .register and .prepare
         '''
-        args = ()
-        kwargs = {}
+        kwargs = NoClobberDict(kwargs)
         if isinstance(method_data, tuple):
             len_method = len(method_data)
             method = method_data[0]
             if 1 < len_method:
-                args = method_data[1]
+                args += method_data[1]
             if 2 < len_method:
-                kwargs = method_data[2]
+                kwargs.update(method_data[2])
         else:
             method = method_data
         return method(*args, **kwargs)
@@ -171,10 +215,13 @@ class Dispatcher(BaseDispatcher):
     def yield_from_handler(self, result):
         '''Given an applied function result, yield from it.
         '''
-        if isinstance(result, self.GeneratorType):
-            yield from result
-        else:
-            yield result
+        return result
+        # if result is None:
+        #     return
+        # if isinstance(result, self.GeneratorType):
+        #     yield from result
+        # else:
+        #     yield result
 
 
 def dedupe(gen):
@@ -188,7 +235,7 @@ def dedupe(gen):
     return wrapped
 
 
-class TypenameDispatcher(Dispatcher):
+class TypeDispatcher(Dispatcher):
     '''Dispatches to a named method by inspecting the invocation, usually
     the type of the first argument.
     '''
@@ -265,20 +312,19 @@ class TypenameDispatcher(Dispatcher):
         matching visitor methodname. Can also be a generator of strings.
         '''
         token = args[0]
-        for mro_type in type(token).__mro__:
-            yield mro_type.__name__
+        for mro_type in type(token).__mro__[:-1]:
+            name = mro_type.__name__
+            yield name
 
     @dedupe
     def gen_methods(self, *args, **kwargs):
         '''Find all method names this input dispatches to.
         '''
         token = args[0]
-        dispatched = False
         data = self.dispatch_data
         for method_key in self.gen_method_keys(*args, **kwargs):
             if method_key in data:
                 yield data[method_key]
-                dispatched = True
 
         # Fall back to built-in types, then types, then collections.
         prefix = self._method_prefix
@@ -293,6 +339,18 @@ class TypenameDispatcher(Dispatcher):
         for basetype_name in (self.method_keys & self.abc_types):
             yield from self.check_basetype(
                 token, basetype_name, getattr(self.collections, basetype_name, None))
+
+        # Try the generic handler.
+        yield from self.gen_generic()
+
+    generic_handler_aliases = (
+        'handle_anything', 'generic_handler', 'generic_handle')
+
+    def gen_generic(self):
+        for alias in self.generic_handler_aliases:
+            generic_handler = getattr(self.inst, alias, None)
+            if generic_handler is not None:
+                yield generic_handler
 
     def check_basetype(self, token, basetype_name, basetype):
         if basetype is None:

@@ -11,7 +11,7 @@ other things this package deems silly and/or garbage.
 '''
 
 setup(name='nmmd',
-      version=VERSION,
+      version='.'.join(map(str, VERSION)),
       packages=find_packages(),
       author='Thom Neale',
       author_email='twneale@gmail.com',

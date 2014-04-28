@@ -12,7 +12,7 @@ __homepage__ = 'http://github.com/twneale/nmmd'
 __docformat__ = 'restructuredtext'
 
 
-from nmmd.base import Dispatcher, DispatchError, TypenameDispatcher
+from nmmd.base import Dispatcher, DispatchError, TypeDispatcher
 from nmmd.ext.regex import RegexDispatcher
 
 

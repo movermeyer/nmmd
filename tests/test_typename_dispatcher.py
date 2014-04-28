@@ -1,11 +1,11 @@
 import unittest
 
-from nmmd import TypenameDispatcher
+from nmmd import TypeDispatcher
 
 class Processor:
     '''A toy dispatcher client.
     '''
-    dispatcher = TypenameDispatcher()
+    dispatcher = TypeDispatcher()
 
     def handle_str(self, token):
         return 'str'
@@ -29,7 +29,7 @@ class Processor:
         return self.dispatcher.dispatch(*args, **kwargs)
 
 
-class TestTypenameDispatcher(unittest.TestCase):
+class TestTypeDispatcher(unittest.TestCase):
 
     processor = Processor()
 
