@@ -79,10 +79,10 @@ class BaseDispatcher:
             return self.prepare()
         except RuntimeError:
             msg ='''
-Oh dear. Please don't reference self.dispatch_data inside self.prepare,
+Don't reference self.dispatch_data inside self.prepare,
 because self.dispatch_data references self.prepare. Instead use
 self.registry.'''
-            raise ImplementationError(msg)
+            raise ImplementationError(msg.strip())
 
     def prepare(self):
         raise NotImplemented()
@@ -199,6 +199,10 @@ class Dispatcher(BaseDispatcher):
     def apply_handler(self, method_data, *args, **kwargs):
         '''Call the dispatched function, optionally with other data
         stored/created during .register and .prepare
+
+        The naivette in this function is likely source of future pain. It
+        doesn't do very smart things when the decorator invocation AND the
+        dispatcher.dispatch invocation both pass arguments.
         '''
         kwargs = NoClobberDict(kwargs)
         if isinstance(method_data, tuple):
@@ -216,12 +220,6 @@ class Dispatcher(BaseDispatcher):
         '''Given an applied function result, yield from it.
         '''
         return result
-        # if result is None:
-        #     return
-        # if isinstance(result, self.GeneratorType):
-        #     yield from result
-        # else:
-        #     yield result
 
 
 def dedupe(gen):
@@ -238,6 +236,9 @@ def dedupe(gen):
 class TypeDispatcher(Dispatcher):
     '''Dispatches to a named method by inspecting the invocation, usually
     the type of the first argument.
+
+    Note this dispatcher doesn't use .prepare or .register, which could
+    cause caching bugs when the dispatcher is used from different instances.
     '''
     # It makes sense to go from general/commonplace to specific/rare,
     # so we try to dispatch by type, then bu interface, like iterableness.
@@ -290,23 +291,9 @@ class TypeDispatcher(Dispatcher):
     def _method_prefix(cls):
         return getattr(cls, 'method_prefix', 'handle_')
 
-    @CachedAttr
-    def method_keys(self):
-        return set(self.dispatch_data)
-
     # ------------------------------------------------------------------------
     # Overridables.
     # ------------------------------------------------------------------------
-    def prepare(self):
-        data = {}
-        inst = self.inst
-        prefix = self.method_prefix
-        for name in dir(inst):
-            if name.startswith(prefix):
-                typename = name.replace(prefix, '', 1)
-                data[typename] = getattr(inst, name)
-        return data
-
     def gen_method_keys(self, *args, **kwargs):
         '''Given a node, return the string to use in computing the
         matching visitor methodname. Can also be a generator of strings.
@@ -321,22 +308,23 @@ class TypeDispatcher(Dispatcher):
         '''Find all method names this input dispatches to.
         '''
         token = args[0]
-        data = self.dispatch_data
+        inst = self.inst
+        prefix = self._method_prefix
         for method_key in self.gen_method_keys(*args, **kwargs):
-            if method_key in data:
-                yield data[method_key]
+            method = getattr(inst, prefix + method_key, None)
+            if method is not None:
+                yield method
 
         # Fall back to built-in types, then types, then collections.
-        prefix = self._method_prefix
         typename = type(token).__name__
         yield from self.check_basetype(
             token, typename, self.builtins.get(typename))
 
-        for basetype_name in (self.method_keys & self.interp_types):
+        for basetype_name in self.interp_types:
             yield from self.check_basetype(
                 token, basetype_name, getattr(self.types, basetype_name, None))
 
-        for basetype_name in (self.method_keys & self.abc_types):
+        for basetype_name in self.abc_types:
             yield from self.check_basetype(
                 token, basetype_name, getattr(self.collections, basetype_name, None))
 
