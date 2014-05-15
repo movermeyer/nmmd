@@ -9,6 +9,8 @@ injecting names into lower stack frames, allowing strings to be
 passed as code and executed in the dispatchers context, and
 other things this package deems silly and/or garbage.
 '''
+VERSION = (0, 0, 2)
+__version__ = '.'.join(str(p) for p in VERSION[0:3]) + ''.join(VERSION[3:])
 
 setup(name='nmmd',
       version='.'.join(map(str, VERSION)),
