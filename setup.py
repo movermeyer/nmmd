@@ -19,4 +19,10 @@ setup(name='nmmd',
       description='Tools for Non-Magical Multiple Dispatch',
       long_description=long_description,
       platforms=['any'],
+      classifiers=["Development Status :: 4 - Beta",
+                   "Intended Audience :: Developers",
+                   "License :: OSI Approved :: BSD License",
+                   "Natural Language :: English",
+                   "Operating System :: OS Independent",
+                   "Programming Language :: Python :: 3.4"]
 )
