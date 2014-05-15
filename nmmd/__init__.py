@@ -4,7 +4,7 @@
 #                 All rights reserved.
 # :license:   BSD (3 Clause), see LICENSE for more details.
 
-VERSION = (0, 0, 1, '')
+VERSION = (0, 0, 1)
 __version__ = '.'.join(str(p) for p in VERSION[0:3]) + ''.join(VERSION[3:])
 __author__ = 'Thom Neale'
 __contact__ = 'twneale@gmail.com'
