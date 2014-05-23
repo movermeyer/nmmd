@@ -1,10 +1,11 @@
 import re
 
-from nmmd import Dispatcher
+from nmmd.base import Dispatcher, try_delegation
 
 
 class RegexDispatcher(Dispatcher):
 
+    @try_delegation
     def prepare(self):
         data = []
         for invoc, method in self.registry:
@@ -13,6 +14,11 @@ class RegexDispatcher(Dispatcher):
             data.append((rgx, method))
         return data
 
+    @try_delegation
+    def get_text(self, text):
+        return text
+
+    @try_delegation
     def gen_methods(self, string):
         for rgx, methodname in self.dispatch_data:
             matchobj = rgx.match(string)
@@ -25,6 +31,7 @@ class RegexDispatcher(Dispatcher):
         if generic is not None:
             yield generic
 
+    @try_delegation
     def apply_handler(self, method_data, *args, **kwargs):
         '''Call the dispatched function, optionally with other data
         stored/created during .register and .prepare. Assume the arguments
