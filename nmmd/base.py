@@ -63,6 +63,27 @@ class ImplementationError(Exception):
     '''Raise if subclass does stuff wrong.
     '''
 
+def try_delegation(method):
+    '''This decorator wraps descriptor methods with a new method that tries
+    to delegate to a function of the same name defined on the owner instance
+    for convenience for dispatcher clients.
+    '''
+    @functools.wraps(method)
+    def delegator(self, *args, **kwargs):
+        if self.try_delegation:
+            # Try to dispatch to the instance's implementation.
+            inst = getattr(self, 'inst', None)
+            if inst is not None:
+                method_name = (self.delegator_prefix or '') + method.__name__
+                func = getattr(inst, method_name, None)
+                if func is not None:
+                    return func(*args, **kwargs)
+
+        # Otherwise run the decorated func.
+        return method(self, *args, **kwargs)
+
+    return delegator
+
 
 class BaseDispatcher:
     DispatchError = DispatchError
@@ -101,6 +122,10 @@ class Dispatcher(BaseDispatcher):
     '''
     __slots__ = tuple()
 
+    def __init__(self, delegate=True, prefix=None):
+        self.try_delegation = delegate
+        self.delegator_prefix = prefix
+
     def __call__(self, *args, **kwargs):
         return self._make_decorator(*args, **kwargs)
 
@@ -127,6 +152,10 @@ class Dispatcher(BaseDispatcher):
     def load_invoc(self, *args, **kwargs):
         return self.loads((args, kwargs))
 
+    # ------------------------------------------------------------------------
+    # Overridables begin here.
+    # ------------------------------------------------------------------------
+    @try_delegation
     def register(self, method, args, kwargs):
         '''Given a single decorated handler function,
         prepare, append desired data to self.registry.
@@ -134,6 +163,7 @@ class Dispatcher(BaseDispatcher):
         invoc = self.dump_invoc(*args, **kwargs)
         self.registry.append((invoc, method.__name__))
 
+    @try_delegation
     def prepare(self):
         '''Given all the registered handlers for this
         dispatcher instance, return any data required
@@ -144,6 +174,7 @@ class Dispatcher(BaseDispatcher):
         '''
         return self.registry
 
+    @try_delegation
     def gen_methods(self, *args, **kwargs):
         '''Find all method names this input dispatches to. This method
         can accept *args, **kwargs, but it's the gen_dispatch method's
@@ -167,6 +198,7 @@ class Dispatcher(BaseDispatcher):
         msg = 'No method was found for %r on %r.'
         raise self.DispatchError(msg % ((args, kwargs), self.inst))
 
+    @try_delegation
     def get_method(self, *args, **kwargs):
         '''Find the first method this input dispatches to.
         '''
@@ -175,12 +207,14 @@ class Dispatcher(BaseDispatcher):
         msg = 'No method was found for %r on %r.'
         raise self.DispatchError(msg % ((args, kwargs), self.inst))
 
+    @try_delegation
     def dispatch(self, *args, **kwargs):
         '''Find and evaluate/return the first method this input dispatches to.
         '''
         for result in self.gen_dispatch(*args, **kwargs):
             return result
 
+    @try_delegation
     def gen_dispatch(self, *args, **kwargs):
         '''Find and evaluate/yield every method this input dispatches to.
         '''
@@ -196,6 +230,7 @@ class Dispatcher(BaseDispatcher):
         msg = 'No method was found for %r on %r.'
         raise self.DispatchError(msg % ((args, kwargs), self.inst))
 
+    @try_delegation
     def apply_handler(self, method_data, *args, **kwargs):
         '''Call the dispatched function, optionally with other data
         stored/created during .register and .prepare
@@ -216,6 +251,7 @@ class Dispatcher(BaseDispatcher):
             method = method_data
         return method(*args, **kwargs)
 
+    @try_delegation
     def yield_from_handler(self, result):
         '''Given an applied function result, yield from it.
         '''
@@ -294,6 +330,7 @@ class TypeDispatcher(Dispatcher):
     # ------------------------------------------------------------------------
     # Overridables.
     # ------------------------------------------------------------------------
+    @try_delegation
     def gen_method_keys(self, *args, **kwargs):
         '''Given a node, return the string to use in computing the
         matching visitor methodname. Can also be a generator of strings.
@@ -303,6 +340,7 @@ class TypeDispatcher(Dispatcher):
             name = mro_type.__name__
             yield name
 
+    @try_delegation
     @dedupe
     def gen_methods(self, *args, **kwargs):
         '''Find all method names this input dispatches to.
@@ -334,12 +372,14 @@ class TypeDispatcher(Dispatcher):
     generic_handler_aliases = (
         'handle_anything', 'generic_handler', 'generic_handle')
 
+    @try_delegation
     def gen_generic(self):
         for alias in self.generic_handler_aliases:
             generic_handler = getattr(self.inst, alias, None)
             if generic_handler is not None:
                 yield generic_handler
 
+    @try_delegation
     def check_basetype(self, token, basetype_name, basetype):
         if basetype is None:
             return
