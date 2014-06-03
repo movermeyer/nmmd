@@ -19,12 +19,16 @@ class RegexDispatcher(Dispatcher):
         return text
 
     @try_delegation
-    def gen_methods(self, string):
+    def gen_methods(self, *args, **kwargs):
+        text = self.get_text(*args, **kwargs)
         for rgx, methodname in self.dispatch_data:
-            matchobj = rgx.match(string)
+            matchobj = rgx.match(text)
             if matchobj:
                 method = getattr(self.inst, methodname)
-                yield method, (string, matchobj)
+                # args = (text, matchobj) + args
+                # yield method, args
+                # args = (text, matchobj) + args
+                yield method, (text, matchobj)
 
         # Else try inst.generic_handler
         generic = getattr(self.inst, 'generic_handler', None)
